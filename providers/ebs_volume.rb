@@ -43,7 +43,7 @@ end
 
 action :snapshot do
 	# Take snapshot of given volume id.
-	success, snapshot_msg = ec2TakeSanp(new_resource.volume_id, new_resource.description)
+	success, snapshot_msg = ec2TakeSnap(new_resource.volume_id, new_resource.description)
 
 	if success
 		Chef::Log.info "Snapshot with ID #{snapshot_msg} has been created from volume ID #{new_resource.volume_id}"
@@ -138,7 +138,7 @@ end
 
 
 # Create snapshot function
-def ec2TakeSanp(volume_id="", description="")
+def ec2TakeSnap(volume_id="", description="")
 	unless volume_id.nil?
 		# Take snapshot of given volume ID
 		volume = ec2.volumes[volume_id]
