@@ -3,16 +3,23 @@ include AWS::Ec2
 require 'open-uri'
 
 action :create do	
-	# Check if snapshot id present
+	
+  if new_resource.terminate_on_delete
+    terminate_on_delete = true
+  else
+    terminate_on_delete = false
+  end
+
+  # Check if snapshot id present
 	if new_resource.snapshot_id =~ /snap-*/
 		Chef::Log.debug "Fetch snapshot_id #{new_resource.snapshot_id}"
 		snapshot_id = findSnapshot(new_resource.snapshot_id)
 		Chef::Log.debug "snapshot_id #{snapshot_id}"
-		ec2Create(new_resource.size, new_resource.device, new_resource.volume_type, new_resource.snapshot_id)
 	else
 		snapshot_id = nil
-		ec2Create(new_resource.size, new_resource.device, new_resource.volume_type, snapshot_id)
 	end
+
+  ec2Create(new_resource.size, new_resource.device, new_resource.volume_type, snapshot_id, terminate_on_delete)
 	#Notify observers
 	new_resource.updated_by_last_action(true)
 end
@@ -36,6 +43,23 @@ action :attach do
 			raise "Volume attach failed ..!"
 		end
 	end
+	
+	#Notify observers
+	new_resource.updated_by_last_action(true)
+end
+
+# TODO VERIFY
+action :detach do
+	# Detach volume
+	volume = ec2.volumes[new_resource.volume_id]
+
+  detach = ec2Detach(volume)
+
+  if detach == "success"
+    Chef::Log.info "Volume with ID #{new_resource.volume_id} has been detached"
+  else
+    raise "Volume attach failed ..!"
+  end
 	
 	#Notify observers
 	new_resource.updated_by_last_action(true)
@@ -75,7 +99,7 @@ action :delete_snapshot do
 end
 
 # Volume create function 
-def ec2Create(size="", device="", volume_type="", snapshot="")
+def ec2Create(size="", device="", volume_type="", snapshot="", terminate_on_delete=false)
 	
 	# Get Instance ID and zone details
 	zone = getZone()
@@ -83,7 +107,7 @@ def ec2Create(size="", device="", volume_type="", snapshot="")
 
 	if !snapshot.nil?
 		volume = ec2.volumes.create(:availability_zone => zone, :volume_type => volume_type,
-									:snapshot_id => snapshot)
+									:snapshot_id => snapshot, :terminate_on_delete => terminate_on_delete)
 
 		sleep 1 until volume.status == :available
 		
@@ -103,7 +127,7 @@ def ec2Create(size="", device="", volume_type="", snapshot="")
 		end
 	else
 		volume = ec2.volumes.create(:size => size, :volume_type => volume_type,
-									:availability_zone => zone)
+									:availability_zone => zone, :terminate_on_delete => terminate_on_delete)
 
 	  sleep 1 until volume.status == :available	
 		
@@ -136,6 +160,13 @@ def ec2Attach(volume="", instances_id="", device="")
 	end
 end
 
+# Volume detach function
+def ec2Detach(volume="")
+  Chef::Log.debug "Device not null!"
+  detach = volume.detach_from_instance()
+  sleep 1 until detach.status == :detaching
+  return "success"
+end
 
 # Create snapshot function
 def ec2TakeSnap(volume_id="", description="")
